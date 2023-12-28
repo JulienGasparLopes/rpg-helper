@@ -6,33 +6,9 @@ import time
 from websockets.server import serve
 import pickle
 
+from player import Player
+
 DEBUG = True
-
-class Player:
-    name: str
-
-    life: float = 180
-    max_life: float = 180
-    life_per_hour: float = 100
-
-    mana: float = 130
-    max_mana: float  = 150
-    mana_per_hour: float = 100
-
-    mana_buff_per_hour: float = 0
-
-    def __init__(self, name: str):
-        self.name = name
-
-    def to_message(self) -> str:
-        return json.dumps({
-            "name": self.name,
-            "life": self.life,
-            "max_life": self.max_life,
-            "mana": self.mana,
-            "max_mana": self.max_mana,
-        })
-    
 
 class Server:
     players: list[Player] = []
@@ -47,7 +23,6 @@ class Server:
         except:
             self.players = [Player("Grusfrut"), Player("Jannnus")]
 
-
     def save_players(self):
         with open("players.json", "wb") as player_file:
             pickle.dump(self.players, player_file)
@@ -56,12 +31,10 @@ class Server:
         print("Update players thread started")
         last_update_ms = time.time() * 1000
         while True:
+            delta_ms = time.time() * 1000 - last_update_ms
+            delta_multiplier = delta_ms / (1000 * 3600) * (60 if DEBUG else 1)
             for player in self.players:
-                delta_ms = time.time() * 1000 - last_update_ms
-                delta_multiplier = delta_ms / (1000 * 3600) * (60 if DEBUG else 1)
-                player.life = max(0, min(player.life + player.life_per_hour * delta_multiplier, player.max_life))
-                mana_delta = (player.mana_buff_per_hour if player.mana_buff_per_hour != 0 else player.mana_per_hour) * delta_multiplier
-                player.mana = max(0, min(player.mana + mana_delta, player.max_mana))
+                player.update(delta_multiplier)
             last_update_ms = time.time() * 1000
             sleep(0.1)
 
@@ -73,9 +46,8 @@ class Server:
                 elif message.startswith("set|"):
                     _, attribut, player_name, mana = message.split("|")
                     for player in self.players:
-                        if player.name == player_name:
+                        if player_name == "all" or player.name == player_name:
                             setattr(player, attribut, float(mana))
-                            break
 
         async def main_ws():
             async with serve(echo, "localhost", 8765):
